@@ -1,0 +1,310 @@
+Sub TransformData()
+    On Error Resume Next
+    Dim sourceRange As Range
+    Set sourceRange = Application.InputBox("Select the source range (excluding headers)", Type:=8)
+    On Error GoTo 0
+
+    If sourceRange Is Nothing Then
+        MsgBox "Operation canceled."
+        Exit Sub
+    End If
+
+    GenerateAPModuleData sourceRange
+
+    GenerateCashModuleData sourceRange
+    
+    GenerateARModuleData sourceRange
+    
+    GenerateJEModuleData sourceRange
+End Sub
+
+Sub GenerateAPModuleData(sourceRange As Range)
+    Dim targetSheet As Worksheet
+    Dim targetRange As Range
+    Dim cell As Range
+    Dim splitResult As Variant
+    Dim rowIndex As Long
+
+    On Error Resume Next
+    Set targetSheet = Worksheets("Entries for AP Module")
+    On Error GoTo 0
+
+    If targetSheet Is Nothing Then
+        Set targetSheet = Worksheets.Add(After:=Sheets(Sheets.Count))
+        targetSheet.Name = "Entries for AP Module"
+        InitializeHeader targetSheet
+    End If
+
+    targetSheet.Rows("2:" & targetSheet.Rows.Count).Clear
+
+    Set targetRange = targetSheet.Cells(2, 1).Resize(sourceRange.Rows.Count, 7)
+
+    targetRange.Columns(1).Value = sourceRange.Columns(2).Value ' Supplier
+    targetRange.Columns(2).Value = sourceRange.Columns(3).Value ' Invoice number
+    targetRange.Columns(3).Value = sourceRange.Columns(4).Value ' Invoice date
+    targetRange.Columns(4).Value = sourceRange.Columns(5).Value ' Description
+    targetRange.Columns(5).Value = sourceRange.Columns(6).Value ' Entry date
+    targetRange.Columns(6).Value = sourceRange.Columns(7).Value ' Amount
+
+    rowIndex = 2
+    For Each cell In sourceRange.Columns(11).Cells
+        If Not IsError(cell.Value) Then
+            If Not IsEmpty(cell.Value) Then
+                splitResult = Split(cell.Value, " ")
+                If UBound(splitResult) >= 0 Then
+                    targetSheet.Cells(rowIndex, 7).Value = splitResult(0)
+                Else
+                    targetSheet.Cells(rowIndex, 7).Value = ""
+                End If
+            End If
+        End If
+        rowIndex = rowIndex + 1
+    Next cell
+
+    targetSheet.Columns.AutoFit
+End Sub
+
+
+
+Sub GenerateCashModuleData(sourceRange As Range)
+    Dim targetSheet As Worksheet
+    Dim targetRange As Range
+    Dim lastRow As Long
+    Dim i As Long
+    Dim splitResult As Variant
+
+    On Error Resume Next
+    Set targetSheet = Worksheets("Entries for Cash Module")
+    On Error GoTo 0
+
+    If targetSheet Is Nothing Then
+        Set targetSheet = Worksheets.Add(After:=Sheets(Sheets.Count))
+        targetSheet.Name = "Entries for Cash Module"
+        InitializeCashModuleHeader targetSheet
+    End If
+
+    lastRow = GetLastDataRow(sourceRange)
+
+    targetSheet.Rows("2:" & targetSheet.Rows.Count).Clear
+
+    Set targetRange = targetSheet.Cells(2, 1).Resize(lastRow - 1, 4)
+
+    targetRange.Columns(1).Value = sourceRange.Columns(2).Value ' Invoice to be settled
+    targetRange.Columns(2).Value = sourceRange.Columns(6).Value ' Entry date
+    targetRange.Columns(3).Value = sourceRange.Columns(7).Value ' Amount
+
+    For i = 1 To lastRow
+        If Not IsEmpty(sourceRange.Cells(i, 11).Value) Then
+            splitResult = Split(sourceRange.Cells(i, 11).Value, " ")
+            If UBound(splitResult) >= 0 Then
+                targetSheet.Cells(i + 1, 4).Value = splitResult(0)
+            Else
+                targetSheet.Cells(i + 1, 4).Value = ""
+            End If
+        End If
+    Next i
+
+    targetSheet.Columns.AutoFit
+End Sub
+
+Sub GenerateARModuleData(sourceRange As Range)
+    Dim targetSheet As Worksheet
+    Dim targetRange As Range
+    Dim cell As Range
+    Dim rowIndex As Long
+    Dim lastRow As Long
+    Dim targetRowIndex As Long
+    
+    On Error Resume Next
+    Set targetSheet = Worksheets("Entries for AR Module")
+    On Error GoTo 0
+
+    If targetSheet Is Nothing Then
+        Set targetSheet = Worksheets.Add(After:=Sheets(Sheets.Count))
+        targetSheet.Name = "Entries for AR Module"
+        InitializeARModuleHeader targetSheet
+    End If
+
+    targetSheet.Rows("2:" & targetSheet.Rows.Count).Clear
+
+    Set targetRange = targetSheet.Cells(2, 1).Resize(sourceRange.Rows.Count, 4)
+
+    targetRowIndex = 2
+    lastRow = sourceRange.Rows.Count + 1
+
+    For rowIndex = 2 To lastRow
+        If sourceRange.Cells(rowIndex - 1, 8).Value <> "No" Then
+            targetSheet.Cells(targetRowIndex, 1).Value = sourceRange.Cells(rowIndex - 1, 9).Value
+            targetSheet.Cells(targetRowIndex, 2).Value = GetDescription(sourceRange.Cells(rowIndex - 1, 2).Value, sourceRange.Cells(rowIndex - 1, 5).Value, sourceRange.Cells(rowIndex - 1, 3).Value)
+            targetSheet.Cells(targetRowIndex, 3).Value = sourceRange.Cells(rowIndex - 1, 7).Value
+            targetSheet.Cells(targetRowIndex, 4).Value = sourceRange.Cells(rowIndex - 1, 4).Value
+            targetRowIndex = targetRowIndex + 1
+        End If
+    Next rowIndex
+
+    targetSheet.Columns.AutoFit
+End Sub
+
+Sub GenerateJEModuleData(sourceRange As Range)
+
+    Dim targetSheet As Worksheet
+    Dim targetRange As Range
+    Dim rowIndex As Long
+    Dim cell As Range
+
+    On Error Resume Next
+    Set targetSheet = Worksheets("Entries for JE")
+    On Error GoTo 0
+
+    If targetSheet Is Nothing Then
+        Set targetSheet = Worksheets.Add(After:=Sheets(Sheets.Count))
+        targetSheet.Name = "Entries for JE"
+        InitializeJEModuleHeader targetSheet
+    End If
+
+    targetSheet.Rows("2:" & targetSheet.Rows.Count).Clear
+
+    Set targetRange = targetSheet.Cells(2, 1).Resize(sourceRange.Rows.Count * 2, 6)
+
+    rowIndex = 2
+    For Each cell In sourceRange.Columns(11).Cells
+        If Not IsError(cell.Value) And Not IsEmpty(cell.Value) Then
+            If sourceRange.Cells(rowIndex - 1, 8).Value <> "No" Then
+                Dim description As String
+                Dim companyToRebill As String
+                Dim coaKeyAmount As String
+                Dim coaKeyDebt As String
+                Dim amount As Double
+                Dim debt As Double
+
+                description = GetDescription(sourceRange.Cells(rowIndex - 1, 2).Value, sourceRange.Cells(rowIndex - 1, 5).Value, sourceRange.Cells(rowIndex - 1, 3).Value)
+                companyToRebill = sourceRange.Cells(rowIndex - 1, 9).Value
+
+                amount = CDbl(sourceRange.Cells(rowIndex - 1, 7).Value)
+                debt = CDbl(sourceRange.Cells(rowIndex - 1, 7).Value)
+
+                coaKeyAmount = GetCOAKey(companyToRebill, "E2000-000-000")
+
+                coaKeyDebt = GetCOAKey(companyToRebill, "L0002-000-000")
+                
+                targetSheet.Cells(rowIndex, 1).Value = Format(Date, "yyyymmdd")
+                targetSheet.Cells(rowIndex, 2).Value = description
+                targetSheet.Cells(rowIndex, 3).Value = companyToRebill
+                targetSheet.Cells(rowIndex, 4).Value = coaKeyAmount
+                targetSheet.Cells(rowIndex, 5).Value = amount
+                targetSheet.Cells(rowIndex, 6).Value = 0
+
+                targetSheet.Cells(rowIndex + 1, 1).Value = Format(Date, "yyyymmdd")
+                targetSheet.Cells(rowIndex + 1, 2).Value = description
+                targetSheet.Cells(rowIndex + 1, 3).Value = companyToRebill
+                targetSheet.Cells(rowIndex + 1, 4).Value = coaKeyDebt
+                targetSheet.Cells(rowIndex + 1, 5).Value = 0
+                targetSheet.Cells(rowIndex + 1, 6).Value = debt
+
+                rowIndex = rowIndex + 2
+            End If
+        End If
+    Next cell
+
+    targetSheet.Columns.AutoFit
+End Sub
+
+
+Function GetCOAKey(companyToRebill As String, accountType As String) As String
+    Dim coaICSheet As Worksheet
+    Dim coaICRange As Range
+    Dim foundCell As Range
+    Dim coaKey As String
+
+    Set coaICSheet = Worksheets("COA IC")
+
+    Set coaICRange = coaICSheet.Columns(2).Find(accountType, LookIn:=xlValues, LookAt:=xlWhole)
+
+    If Not coaICRange Is Nothing Then
+        Debug.Print "Listă pentru accountType " & accountType & ": " & coaICSheet.Cells(coaICRange.Row, 1).Resize(coaICSheet.Rows.Count - coaICRange.Row + 1, 2).Address
+    End If
+
+    If Not coaICRange Is Nothing Then
+        Set foundCell = coaICSheet.Columns(1).Find(companyToRebill, After:=coaICSheet.Cells(coaICRange.Row, 1), LookIn:=xlValues, LookAt:=xlWhole)
+
+        If Not foundCell Is Nothing Then
+            coaKey = Format(coaICSheet.Cells(foundCell.Row, 4).Value, "000000")
+        Else
+            coaKey = "N/A"
+        End If
+    Else
+        coaKey = "N/A"
+    End If
+
+    GetCOAKey = coaKey
+End Function
+
+
+
+
+
+
+
+Sub InitializeJEModuleHeader(targetSheet As Worksheet)
+    targetSheet.Cells(1, 1).Value = "Date"
+    targetSheet.Cells(1, 2).Value = "Description"
+    targetSheet.Cells(1, 3).Value = "Company to rebill"
+    targetSheet.Cells(1, 4).Value = "COA Key"
+    targetSheet.Cells(1, 5).Value = "Amount"
+    targetSheet.Cells(1, 6).Value = "Debt"
+
+    targetSheet.Rows(1).Font.Bold = True
+    targetSheet.Rows(1).Interior.Color = RGB(200, 200, 200) ' Change the color as preferred
+End Sub
+
+
+
+
+Function GetDescription(supplier As String, description As String, invoiceNumber As String) As String
+    GetDescription = supplier & " " & description & " " & invoiceNumber
+End Function
+
+
+Sub InitializeARModuleHeader(targetSheet As Worksheet)
+    targetSheet.Cells(1, 1).Value = "Company to bill"
+    targetSheet.Cells(1, 2).Value = "Description"
+    targetSheet.Cells(1, 3).Value = "Amount"
+    targetSheet.Cells(1, 4).Value = "Date"
+
+    targetSheet.Rows(1).Font.Bold = True
+    targetSheet.Rows(1).Interior.Color = RGB(200, 200, 200)
+End Sub
+
+
+Sub InitializeCashModuleHeader(targetSheet As Worksheet)
+    targetSheet.Cells(1, 1).Value = "Invoice to be settled"
+    targetSheet.Cells(1, 2).Value = "Date"
+    targetSheet.Cells(1, 3).Value = "Amount"
+    targetSheet.Cells(1, 4).Value = "Cash Account"
+
+    targetSheet.Rows(1).Font.Bold = True
+    targetSheet.Rows(1).Interior.Color = RGB(200, 200, 200)
+End Sub
+
+Function GetLastDataRow(rng As Range) As Long
+    Dim lastRow As Long
+    On Error Resume Next
+    lastRow = rng.Cells(rng.Rows.Count, 1).End(xlUp).Row
+    On Error GoTo 0
+    GetLastDataRow = lastRow
+End Function
+
+
+Sub InitializeHeader(targetSheet As Worksheet)
+    targetSheet.Cells(1, 1).Value = "Supplier"
+    targetSheet.Cells(1, 2).Value = "Invoice number"
+    targetSheet.Cells(1, 3).Value = "Invoice date"
+    targetSheet.Cells(1, 4).Value = "Description"
+    targetSheet.Cells(1, 5).Value = "Entry date"
+    targetSheet.Cells(1, 6).Value = "Amount"
+    targetSheet.Cells(1, 7).Value = "Account"
+    
+    targetSheet.Rows(1).Font.Bold = True
+    targetSheet.Rows(1).Interior.Color = RGB(200, 200, 200)
+End Sub
+
